@@ -11,7 +11,7 @@ from .llm import generate_reply, tts
 app = FastAPI(title="MoeX — Team SLM")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # tighten later to your frontend domain
+    allow_origins=["https://abujafar.onrender.com"],  # tighten later to your frontend domain
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
