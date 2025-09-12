@@ -1,0 +1,53 @@
+<!doctype html><html><head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>MoeX — Team SLM</title>
+<style>
+body{font-family:Inter,system-ui,Segoe UI,Arial,sans-serif;margin:0;background:#0a0b10;color:#e7ebf3}
+.wrap{max-width:980px;margin:48px auto;padding:0 20px}
+.card{background:linear-gradient(180deg,#0f1222,#0a0b10);border:1px solid #1b2338;border-radius:20px;box-shadow:0 8px 40px rgba(0,0,0,.35)}
+header{padding:22px 24px;border-bottom:1px solid #1b2338;display:flex;gap:12px;align-items:center;justify-content:space-between}
+header h1{font-size:20px;margin:0;letter-spacing:.2px}.badge{padding:4px 10px;border-radius:999px;background:#111a2b;border:1px solid #27324d;color:#9fb4d9;font-size:12px}
+#chat{padding:20px;min-height:480px;max-height:65vh;overflow:auto}
+.msg{margin:12px 0;padding:14px 16px;border-radius:14px;white-space:pre-wrap}
+.me{background:#141c2e;border:1px solid #213256}.bot{background:#0e1422;border-left:3px solid #7aa2ff;border:1px solid #1a2b4d}
+form{display:flex;gap:10px;padding:14px;border-top:1px solid #1b2338;background:#0b1020;border-radius:0 0 20px 20px}
+input,button,textarea{border-radius:12px;border:1px solid #26314d;background:#0e1526;color:#e7ebf3;padding:12px}
+textarea{flex:1;resize:vertical}.small{font-size:12px;color:#a3b1c7}
+</style></head><body>
+<div class="wrap"><div class="card">
+<header><h1>MoeX — Team SLM</h1><span class="badge">classy • elegant • sharp</span></header>
+<div id="chat"></div>
+<div style="padding:8px 16px" class="small">Name: <input id="name" placeholder="Your name"/> <button id="saveName">Set</button></div>
+<form id="f"><textarea id="m" rows="2" placeholder="Ask MoeX… (e.g., what tasks do I have?)"></textarea><button type="button" id="mic">🎤</button><button>Send</button></form>
+</div></div>
+<script>
+const API = 'https://api.YOURDOMAIN.com'; // CHANGE AFTER DEPLOY; for local dev use 'http://localhost:8030'
+const chat = document.getElementById('chat'), form = document.getElementById('f');
+const input = document.getElementById('m'), nameEl = document.getElementById('name');
+const saveNameBtn = document.getElementById('saveName');
+let NAME = localStorage.getItem('moex_name') || ''; if (NAME) nameEl.value = NAME;
+
+saveNameBtn.onclick = async () => { NAME = nameEl.value || 'Guest'; localStorage.setItem('moex_name', NAME);
+  const fd = new FormData(); fd.append('name', NAME);
+  await fetch(API + '/register', {method:'POST', body: fd});
+  addMsg('System', `Welcome, ${NAME}.`, 'bot');
+};
+function addMsg(who, text, cls){ const el = document.createElement('div'); el.className='msg '+(cls||'');
+  el.innerText=(who?who+':\n':'')+(text||''); chat.appendChild(el); chat.scrollTop=chat.scrollHeight; }
+form.onsubmit = async (e)=>{ e.preventDefault(); const msg=input.value.trim(); if(!msg) return;
+  addMsg(NAME||'Me', msg, 'me'); input.value='';
+  const fd = new FormData(); fd.append('message', msg); fd.append('name', NAME||'Guest');
+  const r = await fetch(API + '/chat', {method:'POST', body: fd}); const j = await r.json();
+  addMsg('MoeX', j.reply || '(no reply)', 'bot');
+  try{ const tfd=new FormData(); tfd.append('text', j.reply||''); const rr=await fetch(API+'/tts',{method:'POST',body:tfd});
+    if(rr.ok){ const blob=await rr.blob(); const url=URL.createObjectURL(blob); const audio=new Audio(url); audio.play(); } }catch(_){}
+};
+// mic (Chrome): Web Speech API
+let rec; const micBtn=document.getElementById('mic');
+if ('webkitSpeechRecognition' in window) { const SR=window.webkitSpeechRecognition; rec=new SR();
+  rec.continuous=false; rec.interimResults=false; rec.lang='en-US';
+  rec.onresult=(e)=>{ input.value=(input.value+' '+e.results[0][0].transcript).trim(); };
+  rec.onerror=()=>{ micBtn.textContent='🎤'; }; rec.onend=()=>{ micBtn.textContent='🎤'; };
+  micBtn.onclick=()=>{ if(!rec) return; micBtn.textContent='⏺️'; rec.start(); };
+} else { micBtn.disabled=true; micBtn.title='Speech recognition not supported';}
+</script></body></html>
