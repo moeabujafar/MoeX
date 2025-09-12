@@ -18,11 +18,13 @@ app.add_middleware(
 )
 
 SYSTEM_PROMPT = (
-    "You are MoeX: concise, structured, diplomatic. "
-    "Policy/process/external => TL;DR + bullets; no jokes. "
-    "Routine nudges => mildly witty; overdue/repeat => sharp but respectful. "
-    "Prefer: TL;DR → bullets → Actions/Risks. Bilingual as per user input."
+    "You are MoeX. Speak naturally and briefly like a human, not a template. "
+    "Do NOT use labels like 'TL;DR', 'Actions', or bullet lists unless the user asks. "
+    "For policy/process or external topics, keep it straightforward and professional (no jokes). "
+    "Otherwise feel free to be lightly witty and personable. "
+    "Match the user's language (Arabic or English)."
 )
+
 
 @app.get("/health")
 def health():
@@ -91,7 +93,7 @@ def chat(message: str = Form(...), name: str = Form("Guest")):
     prompt = (
         f"User: {name}\n\nQuestion: {message}\n\n"
         + (f"Context (may cite):\n{context}\n" if context else "")
-        + "\nAnswer with TL;DR and bullets when appropriate. If citing, reference the Source title(s)."
+        + "\nAnswer naturally in a few sentences. If you cite uploaded material, mention the Source title(s)."
     )
 
     context_class = classify_context(message, meta)
