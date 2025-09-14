@@ -1,0 +1,28 @@
+# OS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual envs
+.venv/
+venv/
+ENV/
+
+# Environment files (keep secrets out of Git)
+.env
+.env.*
+!.env.example
+
+# Editor junk
+.vscode/
+.idea/
+
+# Byte-compiled
+*.so
+
+# macOS
+*.swp
