@@ -2,7 +2,11 @@ import os
 from typing import List, Dict
 from openai import OpenAI
 
-_client = OpenAI(api_key=os.getenv("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"))
+_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+if not api_key:
+    raise RuntimeError("Missing OPENAI_API_KEY environment variable.")
+
+client = OpenAI(api_key=api_key)
 
 PERSONA = """You are MoeX, Moe’s digital twin. Voice: concise, sharp, friendly, a touch sarcastic.
 Rules:
