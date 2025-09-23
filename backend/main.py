@@ -27,6 +27,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 👇 Add this root route
+@app.get("/")
+def root():
+    return {"message": "MoeX is alive"}
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
 @app.get("/healthz")
 def healthz():
     return {"ok": True}
@@ -45,9 +54,7 @@ async def chat(message: str = Form(...), name: str = Form("Guest")):
         final = sanitize(raw)
         return JSONResponse({"reply": final})
     except Exception as e:
-        # Print full stack trace to the server logs
         traceback.print_exc()
-        # Return a readable error body so curl shows you the root cause
         return JSONResponse(
             status_code=500,
             content={"error": f"{type(e).__name__}: {e}"}

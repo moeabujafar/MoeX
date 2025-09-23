@@ -3,10 +3,8 @@ from typing import List, Dict
 from openai import OpenAI
 
 _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-if not api_key:
+if not _client:
     raise RuntimeError("Missing OPENAI_API_KEY environment variable.")
-
-client = OpenAI(api_key=api_key)
 
 PERSONA = """You are MoeX, Moe’s digital twin. Voice: concise, sharp, friendly, a touch sarcastic.
 Rules:
