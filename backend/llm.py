@@ -1,18 +1,23 @@
 # backend/llm.py
 import os
+import logging
 from typing import List, Dict, Optional
+
+# -------- Logging (kept simple) --------
+logging.basicConfig(level=logging.INFO, format="%(levelname)s llm.py: %(message)s")
+log = logging.getLogger(__name__)
 
 try:
     from openai import OpenAI  # OpenAI Python SDK v1.x
 except Exception as e:  # pragma: no cover
     raise RuntimeError(
-        "OpenAI SDK not available. Install with: pip install openai>=1.30.0"
+        "OpenAI SDK not available. Install with: pip install 'openai>=1.30.0'"
     ) from e
 
 
 # -------- Persona (system prompt) --------
 PERSONA = """
-You are MoeX — Abu Jafar’s concise, sharp, witty digital twin.
+You are MoeX — Abu Jafar’s concise, sharp, witty digital twin and Personal assistant.
 - Speak casually, like a sarcastic but reliable friend. dont be rude though.
 - Use short sentences and contractions (e.g., "don't" instead of "do not").
 - Dont Use emojis unless user used it.
@@ -50,13 +55,17 @@ Clarity & time
 
 Security
 - Never ask the user to paste secrets. Use environment variables. If a key leaked, instruct rotation.
-"""
-# -------- Client creation (lazy) --------
+""".strip()
+
+
+# -------- Client + config helpers --------
 def _get_client() -> OpenAI:
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        # Let the caller bubble this up; main.py turns it into a readable JSON error.
+        # Raise (FastAPI will turn this into JSON) and log a clear hint
+        log.error("OPENAI_API_KEY is missing.")
         raise RuntimeError("Missing OPENAI_API_KEY environment variable.")
+    # Passing api_key explicitly avoids weird env resolution in some hosts
     return OpenAI(api_key=api_key)
 
 
@@ -66,7 +75,12 @@ def _model_and_params():
         temperature = float(os.getenv("OPENAI_TEMPERATURE", "0.4"))
     except ValueError:
         temperature = 0.4
-    return model, temperature
+    # Soft cap output so the model doesn't return nothing due to server-side limits
+    try:
+        max_tokens = int(os.getenv("OPENAI_MAX_TOKENS", "400"))
+    except ValueError:
+        max_tokens = 400
+    return model, temperature, max_tokens
 
 
 def _build_system_prompt(identity_context: Optional[dict]) -> str:
@@ -74,15 +88,13 @@ def _build_system_prompt(identity_context: Optional[dict]) -> str:
     Merge the global MoeX persona with per-person personalization.
     Accepts keys: name, email, tags, persona (all optional).
     """
-    prompt = PERSONA.strip()
-
+    prompt = PERSONA
     if identity_context:
         name = identity_context.get("name")
         email = identity_context.get("email")
         tags = identity_context.get("tags")
         persona = identity_context.get("persona")
 
-        # Keep these short so they guide tone without overwhelming the model.
         bits: List[str] = []
         if name or email:
             bits.append(f"Caller: {name or 'Unknown'}{f' ({email})' if email else ''}.")
@@ -93,26 +105,44 @@ def _build_system_prompt(identity_context: Optional[dict]) -> str:
 
         if bits:
             prompt += "\n\n" + "\n".join(bits)
-
     return prompt
 
 
-# -------- New: Identity-aware respond() --------
+def _safe_text(resp) -> str:
+    """
+    Extract a usable string or return a helpful fallback.
+    """
+    try:
+        text = (resp.choices[0].message.content or "").strip()
+    except Exception as e:
+        log.error(f"Failed to parse OpenAI response: {e}")
+        text = ""
+    if not text:
+        # Return a visible, non-empty fallback to avoid '(no reply)'
+        text = (
+            "Hmm… I got an empty reply. "
+            "Check OPENAI_API_KEY / OPENAI_MODEL on the server and try again."
+        )
+    return text
+
+
+# -------- Primary API used by /chat --------
 def respond(user_text: str, identity_context: Optional[dict] = None) -> str:
     """
     Identity-aware reply used by /chat.
     - identity_context may include: name, email, tags, persona
     - Uses global PERSONA plus per-person persona when available.
     """
-    client = _get_client()
-    model, temperature = _model_and_params()
+    if not isinstance(user_text, str) or not user_text.strip():
+        return "Say something first, boss. I can’t read minds… yet."
 
+    client = _get_client()
+    model, temperature, max_tokens = _model_and_params()
     system_prompt = _build_system_prompt(identity_context)
 
-    # Keep the user message clean. If you want name prefixed, do it here:
-    user_msg = user_text if not identity_context else \
-        f"{identity_context.get('name') or 'User'}: {user_text}"
+    user_msg = user_text if not identity_context else f"{identity_context.get('name') or 'User'}: {user_text}"
 
+    log.info(f"Calling OpenAI model={model} temp={temperature} max_tokens={max_tokens}")
     resp = client.chat.completions.create(
         model=model,
         messages=[
@@ -120,8 +150,11 @@ def respond(user_text: str, identity_context: Optional[dict] = None) -> str:
             {"role": "user", "content": user_msg},
         ],
         temperature=temperature,
+        max_tokens=max_tokens,
     )
-    return (resp.choices[0].message.content or "").strip()
+    out = _safe_text(resp)
+    log.info(f"Reply length={len(out)} chars")
+    return out
 
 
 # -------- Legacy Public API (kept for compatibility) --------
@@ -134,27 +167,27 @@ def generate_reply(
     Generate a reply given user_text and optional context messages.
 
     - Uses system PERSONA above.
-    - Respects OPENAI_MODEL (default: gpt-4o-mini) and OPENAI_TEMPERATURE (default: 0.4).
+    - Respects OPENAI_MODEL (default: gpt-4o-mini), OPENAI_TEMPERATURE (0.4), OPENAI_MAX_TOKENS (400).
     - Raises on missing/invalid API key; your FastAPI handler catches and returns JSON error.
     """
-    messages: List[Dict[str, str]] = [{"role": "system", "content": PERSONA.strip()}]
+    messages: List[Dict[str, str]] = [{"role": "system", "content": PERSONA}]
 
     if context_msgs:
-        # Keep only valid message dicts with role/content
         for m in context_msgs:
             role = m.get("role")
             content = m.get("content")
             if role in {"system", "user", "assistant"} and isinstance(content, str):
                 messages.append({"role": role, "content": content})
 
-    # Keep legacy behavior of prefixing name in the user content
     messages.append({"role": "user", "content": f"{name}: {user_text}"})
 
-    model, temperature = _model_and_params()
+    model, temperature, max_tokens = _model_and_params()
     client = _get_client()
+    log.info(f"(legacy) Calling OpenAI model={model}")
     resp = client.chat.completions.create(
         model=model,
         messages=messages,
         temperature=temperature,
+        max_tokens=max_tokens,
     )
-    return (resp.choices[0].message.content or "").strip()
+    return _safe_text(resp)
