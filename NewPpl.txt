@@ -1,0 +1,180 @@
+📘 Handybook: Managing People & Personalization in MoeX
+📂 Where Things Live
+MoeX/
+├── backend/
+│   ├── schema.sql      # DB structure (people, sessions, chats, tasks)
+│   ├── db.py           # DB helpers (execute, query, etc.)
+│   ├── seed.py         # Seeder script for adding people + tasks
+│   ├── main.py         # FastAPI routes (/chat, /auth, /people, /tasks, etc.)
+│   └── llm.py          # LLM logic (respond, persona merging)
+├── frontend/           # UI if you build one
+└── backend/moex.db     # SQLite database file (actual data)
+
+1️⃣ Create / Update Schema
+
+File: backend/schema.sql
+Ensure it has these 4 tables:
+
+-- People
+CREATE TABLE IF NOT EXISTS people (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  email TEXT UNIQUE,
+  handle TEXT UNIQUE,
+  tags TEXT,
+  persona TEXT,
+  secret_salt BLOB,
+  secret_hash BLOB,
+  is_enabled INTEGER DEFAULT 1,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+-- Sessions
+CREATE TABLE IF NOT EXISTS sessions (
+  id INTEGER PRIMARY KEY,
+  person_id INTEGER NOT NULL,
+  token TEXT UNIQUE NOT NULL,
+  trusted_until TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY(person_id) REFERENCES people(id)
+);
+
+-- Chats
+CREATE TABLE IF NOT EXISTS chats (
+  id INTEGER PRIMARY KEY,
+  person_id INTEGER,
+  role TEXT NOT NULL,   -- 'user' | 'assistant'
+  text TEXT NOT NULL,
+  ts TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY(person_id) REFERENCES people(id)
+);
+CREATE INDEX IF NOT EXISTS idx_chats_person_id ON chats(person_id);
+
+-- Tasks
+CREATE TABLE IF NOT EXISTS tasks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  person_id INTEGER NOT NULL,
+  title TEXT NOT NULL,
+  due_date TEXT,
+  status TEXT DEFAULT 'pending',
+  FOREIGN KEY (person_id) REFERENCES people(id)
+);
+
+
+📌 Run once to apply to your DB:
+
+sqlite3 backend/moex.db < backend/schema.sql
+
+2️⃣ Seed People & Tasks
+
+File: backend/seed.py
+
+from backend import db
+from backend.main import _hash_secret
+
+def seed_person(name, secret_word, email=None, handle=None, tags=None, persona=None):
+    salt, h = _hash_secret(secret_word)
+    person_id = db.execute(
+        """INSERT INTO people(name,email,handle,tags,persona,secret_salt,secret_hash,is_enabled)
+           VALUES(?,?,?,?,?,?,?,1)""",
+        (name, email, handle, tags, persona, salt, h),
+    )
+    print(f"✅ Seeded {name} (id={person_id})")
+    return person_id
+
+def seed_task(person_id, title, due_date=None, status="pending"):
+    task_id = db.execute(
+        "INSERT INTO tasks(person_id,title,due_date,status) VALUES(?,?,?,?)",
+        (person_id, title, due_date, status),
+    )
+    print(f"   ➕ Task added (id={task_id}): {title}")
+    return task_id
+
+if __name__ == "__main__":
+    fatima_id = seed_person(
+        name="Fatima Alzaabi",
+        handle="fatima",
+        tags="Finance, AR, Student Billing",
+        persona="Keep answers short, bullet points, focus on AR deadlines.",
+        secret_word="orchid"
+    )
+
+    seed_task(fatima_id, "Collect AR balances for MSc students", "2025-09-30")
+    seed_task(fatima_id, "Reconcile September invoices")
+
+
+Run it:
+
+python -m backend.seed
+
+
+Check results:
+
+sqlite3 backend/moex.db "SELECT name, persona FROM people;"
+sqlite3 backend/moex.db "SELECT * FROM tasks;"
+
+3️⃣ Personalize Replies
+
+File: backend/llm.py
+Modify respond() so MoeX uses each person’s persona:
+
+def respond(user_text: str, identity_context: dict = None) -> str:
+    system_prompt = PERSONA  # MoeX’s global voice
+    if identity_context and identity_context.get("persona"):
+        system_prompt += f"\n\nSpecial instructions for {identity_context['name']}:\n{identity_context['persona']}"
+    # call OpenAI as usual...
+
+
+Now Fatima always gets answers in her style (short, bullet points, deadline-focused).
+
+4️⃣ Use API to Interact
+Step 1 – Claim Identity
+curl -X POST http://127.0.0.1:8000/auth/claim \
+-H "Content-Type: application/json" \
+-d '{"handle":"fatima"}'
+
+Step 2 – Verify with Secret Word
+curl -X POST http://127.0.0.1:8000/auth/verify \
+-H "Content-Type: application/json" \
+-d '{"person_id":1,"secret_word":"orchid"}'
+
+
+This gives you a session cookie.
+
+Step 3 – Chat
+curl -X POST http://127.0.0.1:8000/chat \
+-H "Content-Type: application/json" \
+-d '{"message":"What’s my task today?"}' \
+--cookie "moex_session=YOUR_TOKEN"
+
+
+MoeX will pull from tasks and respond in Fatima’s style.
+
+5️⃣ Optional: /tasks/my Endpoint
+
+Add to backend/main.py:
+
+@app.get("/tasks/my")
+def my_tasks(moex_session: str | None = Cookie(default=None)):
+    person, _ = person_from_session(moex_session)
+    if not person:
+        return {"authenticated": False}
+    tasks = db.all("SELECT id,title,due_date,status FROM tasks WHERE person_id=?", (person["id"],))
+    return {"authenticated": True, "tasks": tasks}
+
+
+Now Fatima can call /tasks/my and get her assignments directly.
+
+✅ Checklist When Adding Someone New
+
+Edit seed.py → add their details (handle, secret_word, tags, persona).
+
+Run python -m backend.seed.
+
+Verify in DB (SELECT * FROM people;).
+
+Optionally seed tasks with seed_task().
+
+Start server → test claim/verify/chat.
+
+MoeX replies in their style + shows their tasks.

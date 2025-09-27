@@ -51,8 +51,6 @@ Clarity & time
 Security
 - Never ask the user to paste secrets. Use environment variables. If a key leaked, instruct rotation.
 """
-
-
 # -------- Client creation (lazy) --------
 def _get_client() -> OpenAI:
     api_key = os.getenv("OPENAI_API_KEY")
@@ -62,7 +60,71 @@ def _get_client() -> OpenAI:
     return OpenAI(api_key=api_key)
 
 
-# -------- Public API --------
+def _model_and_params():
+    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    try:
+        temperature = float(os.getenv("OPENAI_TEMPERATURE", "0.4"))
+    except ValueError:
+        temperature = 0.4
+    return model, temperature
+
+
+def _build_system_prompt(identity_context: Optional[dict]) -> str:
+    """
+    Merge the global MoeX persona with per-person personalization.
+    Accepts keys: name, email, tags, persona (all optional).
+    """
+    prompt = PERSONA.strip()
+
+    if identity_context:
+        name = identity_context.get("name")
+        email = identity_context.get("email")
+        tags = identity_context.get("tags")
+        persona = identity_context.get("persona")
+
+        # Keep these short so they guide tone without overwhelming the model.
+        bits: List[str] = []
+        if name or email:
+            bits.append(f"Caller: {name or 'Unknown'}{f' ({email})' if email else ''}.")
+        if tags:
+            bits.append(f"Caller works in: {tags}.")
+        if persona:
+            bits.append(f"Special instructions for {name or 'this caller'}:\n{persona}")
+
+        if bits:
+            prompt += "\n\n" + "\n".join(bits)
+
+    return prompt
+
+
+# -------- New: Identity-aware respond() --------
+def respond(user_text: str, identity_context: Optional[dict] = None) -> str:
+    """
+    Identity-aware reply used by /chat.
+    - identity_context may include: name, email, tags, persona
+    - Uses global PERSONA plus per-person persona when available.
+    """
+    client = _get_client()
+    model, temperature = _model_and_params()
+
+    system_prompt = _build_system_prompt(identity_context)
+
+    # Keep the user message clean. If you want name prefixed, do it here:
+    user_msg = user_text if not identity_context else \
+        f"{identity_context.get('name') or 'User'}: {user_text}"
+
+    resp = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_msg},
+        ],
+        temperature=temperature,
+    )
+    return (resp.choices[0].message.content or "").strip()
+
+
+# -------- Legacy Public API (kept for compatibility) --------
 def generate_reply(
     user_text: str,
     name: str = "Guest",
@@ -75,8 +137,8 @@ def generate_reply(
     - Respects OPENAI_MODEL (default: gpt-4o-mini) and OPENAI_TEMPERATURE (default: 0.4).
     - Raises on missing/invalid API key; your FastAPI handler catches and returns JSON error.
     """
-    # Build messages
-    messages: List[Dict[str, str]] = [{"role": "system", "content": PERSONA}]
+    messages: List[Dict[str, str]] = [{"role": "system", "content": PERSONA.strip()}]
+
     if context_msgs:
         # Keep only valid message dicts with role/content
         for m in context_msgs:
@@ -84,22 +146,15 @@ def generate_reply(
             content = m.get("content")
             if role in {"system", "user", "assistant"} and isinstance(content, str):
                 messages.append({"role": role, "content": content})
+
+    # Keep legacy behavior of prefixing name in the user content
     messages.append({"role": "user", "content": f"{name}: {user_text}"})
 
-    # Model & params from env (with sane defaults)
-    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-    try:
-        temperature = float(os.getenv("OPENAI_TEMPERATURE", "0.4"))
-    except ValueError:
-        temperature = 0.4
-
-    # Call OpenAI
+    model, temperature = _model_and_params()
     client = _get_client()
     resp = client.chat.completions.create(
         model=model,
         messages=messages,
         temperature=temperature,
     )
-
-    content = (resp.choices[0].message.content or "").strip()
-    return content
+    return (resp.choices[0].message.content or "").strip()
