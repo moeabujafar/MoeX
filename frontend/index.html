@@ -1,6 +1,6 @@
 <!doctype html><html><head>
 <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>MoeX — Team SLM</title>
+<title>Abu Jafar Live - By MoeX </title>
 <style>
 body{font-family:Inter,system-ui,Segoe UI,Arial,sans-serif;margin:0;background:#0a0b10;color:#e7ebf3}
 .wrap{max-width:980px;margin:48px auto;padding:0 20px}
@@ -15,7 +15,7 @@ input,button,textarea{border-radius:12px;border:1px solid #26314d;background:#0e
 textarea{flex:1;resize:vertical}.small{font-size:12px;color:#a3b1c7}
 </style></head><body>
 <div class="wrap"><div class="card">
-<header><h1>MoeX — Team SLM</h1><span class="badge">classy • elegant • sharp</span></header>
+<header><h1>Abu Jafar Live - By MoeX</h1><span class="badge">Becareful what you wish for</span></header>
 <div id="chat"></div>
 <div style="padding:8px 16px" class="small">Name: <input id="name" placeholder="Your name"/> <button id="saveName">Set</button></div>
 <form id="f"><textarea id="m" rows="2" placeholder="Ask MoeX… (e.g., what tasks do I have?)"></textarea><button type="button" id="mic">🎤</button><button>Send</button></form>
@@ -50,4 +50,4 @@ if ('webkitSpeechRecognition' in window) { const SR=window.webkitSpeechRecogniti
   rec.onerror=()=>{ micBtn.textContent='🎤'; }; rec.onend=()=>{ micBtn.textContent='🎤'; };
   micBtn.onclick=()=>{ if(!rec) return; micBtn.textContent='⏺️'; rec.start(); };
 } else { micBtn.disabled=true; micBtn.title='Speech recognition not supported';}
-</script></body></html>
+</script><script src="./app.js"></script></body></html>
