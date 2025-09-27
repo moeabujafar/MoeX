@@ -15,7 +15,7 @@ input,button,textarea{border-radius:12px;border:1px solid #26314d;background:#0e
 textarea{flex:1;resize:vertical}.small{font-size:12px;color:#a3b1c7}
 </style></head><body>
 <div class="wrap"><div class="card">
-<header><h1>Abu Jafar Live - By MoeX</h1><span class="badge">Becareful what you wish for</span></header>
+<header><h1>Abu Jafar Live - By MoeX</h1><span class="badge">Becareful what you wish for..</span></header>
 <div id="chat"></div>
 <div style="padding:8px 16px" class="small">Name: <input id="name" placeholder="Your name"/> <button id="saveName">Set</button></div>
 <form id="f"><textarea id="m" rows="2" placeholder="Ask MoeX… (e.g., what tasks do I have?)"></textarea><button type="button" id="mic">🎤</button><button>Send</button></form>
@@ -24,6 +24,13 @@ textarea{flex:1;resize:vertical}.small{font-size:12px;color:#a3b1c7}
 const API = 'https://moex-api.onrender.com'; // CHANGE AFTER DEPLOY; for local dev use 'http://localhost:8030'
 const chat = document.getElementById('chat'), form = document.getElementById('f');
 const input = document.getElementById('m'), nameEl = document.getElementById('name');
+// Enter to send, Shift+Enter for newline
+input.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    form.requestSubmit(); // triggers your existing form.onsubmit
+  }
+});
 const saveNameBtn = document.getElementById('saveName');
 let NAME = localStorage.getItem('moex_name') || ''; if (NAME) nameEl.value = NAME;
 
