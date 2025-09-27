@@ -1,6 +1,6 @@
 <!doctype html><html><head>
 <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Abu Jafar Live - By MoeX </title>
+<title>MoeX — Abu Jafar’s Bat-Signal</title>
 <style>
 body{font-family:Inter,system-ui,Segoe UI,Arial,sans-serif;margin:0;background:#0a0b10;color:#e7ebf3}
 .wrap{max-width:980px;margin:48px auto;padding:0 20px}
@@ -13,12 +13,21 @@ header h1{font-size:20px;margin:0;letter-spacing:.2px}.badge{padding:4px 10px;bo
 form{display:flex;gap:10px;padding:14px;border-top:1px solid #1b2338;background:#0b1020;border-radius:0 0 20px 20px}
 input,button,textarea{border-radius:12px;border:1px solid #26314d;background:#0e1526;color:#e7ebf3;padding:12px}
 textarea{flex:1;resize:vertical}.small{font-size:12px;color:#a3b1c7}
+.subtitle{display:block;font-size:13px;color:#9fb4d9;font-weight:500;letter-spacing:.2px;margin-top:2px}
+
 </style></head><body>
 <div class="wrap"><div class="card">
-<header><h1>Abu Jafar Live - By MoeX</h1><span class="badge">Becareful what you wish for..</span></header>
+<header>
+  <div>
+    <h1>MoeX</h1>
+    <span class="subtitle">Abu Jafar's Bat-Signal</span>
+  </div>
+  <span class="badge">Why So Serious?</span>
+</header>
+
 <div id="chat"></div>
 <div style="padding:8px 16px" class="small">Name: <input id="name" placeholder="Your name"/> <button id="saveName">Set</button></div>
-<form id="f"><textarea id="m" rows="2" placeholder="Ask MoeX… (e.g., what tasks do I have?)"></textarea><button type="button" id="mic">🎤</button><button>Send</button></form>
+<form id="f"><textarea id="m" rows="2" placeholder="Dont be shy.. feel free to ask!"></textarea><button type="button" id="mic">🎤</button><button>Send</button></form>
 </div></div>
 <script>
 const API = 'https://moex-api.onrender.com'; // CHANGE AFTER DEPLOY; for local dev use 'http://localhost:8030'
