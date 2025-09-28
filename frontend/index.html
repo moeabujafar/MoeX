@@ -66,4 +66,5 @@ if ('webkitSpeechRecognition' in window) { const SR=window.webkitSpeechRecogniti
   rec.onerror=()=>{ micBtn.textContent='🎤'; }; rec.onend=()=>{ micBtn.textContent='🎤'; };
   micBtn.onclick=()=>{ if(!rec) return; micBtn.textContent='⏺️'; rec.start(); };
 } else { micBtn.disabled=true; micBtn.title='Speech recognition not supported';}
-</script><script src="./app.js"></script></body></html>
+<script src="/app.js" defer></script>
+</body></html>
