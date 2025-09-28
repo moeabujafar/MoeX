@@ -1,3 +1,4 @@
+# backend/main.py
 from datetime import datetime, timedelta, timezone
 import os, secrets, hashlib, re, traceback
 from fastapi import FastAPI, Cookie, Response, HTTPException, Form
@@ -7,12 +8,14 @@ from pydantic import BaseModel, EmailStr
 
 from backend import db
 from backend import llm
-from backend.llm import generate_reply
+from backend.llm import generate_reply  # kept for compatibility if used elsewhere
 
 # ----------------- App Setup -----------------
 app = FastAPI(title="MoeX API")
 
 TRUST_DAYS = int(os.getenv("MOEX_TRUST_DAYS", "14"))
+# Allow guest chats if no session cookie present (default: true)
+ALLOW_GUESTS = os.getenv("ALLOW_GUESTS", "true").lower() == "true"
 
 @app.on_event("startup")
 def _startup():
@@ -29,19 +32,19 @@ def _verify_secret(secret: str, salt: bytes, secret_hash: bytes) -> bool:
     test = hashlib.pbkdf2_hmac("sha256", secret.encode("utf-8"), salt, 120_000)
     return secrets.compare_digest(test, secret_hash)
 
-def _now_utc(): 
+def _now_utc():
     return datetime.now(timezone.utc)
 
-def _iso(dt: datetime): 
+def _iso(dt: datetime):
     return dt.astimezone(timezone.utc).isoformat()
 
 def person_from_session(token: str | None):
-    if not token: 
+    if not token:
         return None, None
     s = db.one("SELECT * FROM sessions WHERE token=?", (token,))
-    if not s: 
+    if not s:
         return None, None
-    if datetime.fromisoformat(s["trusted_until"]) < _now_utc(): 
+    if datetime.fromisoformat(s["trusted_until"]) < _now_utc():
         return None, None
     p = db.one("SELECT * FROM people WHERE id=? AND is_enabled=1", (s["person_id"],))
     return p, s
@@ -118,17 +121,29 @@ def chat(body: ChatInput, moex_session: str | None = Cookie(default=None)):
         person, sess = person_from_session(moex_session)
         user_text = body.message
 
-        # Log user message
+        # Log user message (person may be None for guests)
         log_chat(person["id"] if person else None, "user", user_text)
 
+        # If user not identified by session:
         if not person:
-            assistant = "Hey—who am I speaking to? (name or work email)"
-            log_chat(None, "assistant", assistant)
-            return {"authenticated": False, "reply": assistant, "next": "POST /auth/claim"}
+            if ALLOW_GUESTS:
+                # Proceed as Guest
+                identity_context = {"name": "Guest"}
+                raw = llm.respond(user_text, identity_context=identity_context)
+                final = sanitize(raw)
+                log_chat(None, "assistant", final)
+                # Keep shape stable for your UI (uses 'reply'); mark guest explicitly
+                return {"authenticated": False, "guest": True, "reply": final}
+            else:
+                # Original behavior: ask to identify
+                assistant = "Hey—who am I speaking to? (name or work email)"
+                log_chat(None, "assistant", assistant)
+                return {"authenticated": False, "reply": assistant, "next": "POST /auth/claim"}
 
+        # Identified user path
         identity_context = {
-            "name": person["name"], 
-            "email": person["email"], 
+            "name": person["name"],
+            "email": person["email"],
             "tags": person["tags"]
         }
         raw = llm.respond(user_text, identity_context=identity_context)
