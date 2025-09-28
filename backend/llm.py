@@ -1,7 +1,9 @@
 # backend/llm.py
 import os
+import time
+import random
 import logging
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 
 # -------- Logging (kept simple) --------
 logging.basicConfig(level=logging.INFO, format="%(levelname)s llm.py: %(message)s")
@@ -9,6 +11,7 @@ log = logging.getLogger(__name__)
 
 try:
     from openai import OpenAI  # OpenAI Python SDK v1.x
+    from openai._exceptions import RateLimitError, APIStatusError, APIConnectionError, APITimeoutError
 except Exception as e:  # pragma: no cover
     raise RuntimeError(
         "OpenAI SDK not available. Install with: pip install 'openai>=1.30.0'"
@@ -59,23 +62,32 @@ Security
 
 
 # -------- Client + config helpers --------
+_client: Optional[OpenAI] = None
+
+def _timeout_seconds() -> float:
+    # keep requests snappy; adjust via env if needed
+    try:
+        return float(os.getenv("OPENAI_TIMEOUT", "25"))
+    except ValueError:
+        return 25.0
+
 def _get_client() -> OpenAI:
+    global _client
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        # Raise (FastAPI will turn this into JSON) and log a clear hint
         log.error("OPENAI_API_KEY is missing.")
         raise RuntimeError("Missing OPENAI_API_KEY environment variable.")
-    # Passing api_key explicitly avoids weird env resolution in some hosts
-    return OpenAI(api_key=api_key)
+    if _client is None:
+        # Explicit api_key + default timeouts on the client
+        _client = OpenAI(api_key=api_key, timeout=_timeout_seconds())
+    return _client
 
-
-def _model_and_params():
+def _model_and_params() -> Tuple[str, float, int]:
     model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
     try:
         temperature = float(os.getenv("OPENAI_TEMPERATURE", "0.4"))
     except ValueError:
         temperature = 0.4
-    # Soft cap output so the model doesn't return nothing due to server-side limits
     try:
         max_tokens = int(os.getenv("OPENAI_MAX_TOKENS", "400"))
     except ValueError:
@@ -118,12 +130,49 @@ def _safe_text(resp) -> str:
         log.error(f"Failed to parse OpenAI response: {e}")
         text = ""
     if not text:
-        # Return a visible, non-empty fallback to avoid '(no reply)'
         text = (
             "Hmm… I got an empty reply. "
             "Check OPENAI_API_KEY / OPENAI_MODEL on the server and try again."
         )
     return text
+
+
+# -------- Robust call wrapper with retries --------
+def _call_openai(messages: List[Dict[str, str]], temperature: float, max_tokens: int) -> str:
+    """
+    Calls OpenAI Chat Completions with small retry (to avoid 'no reply' on transient errors).
+    """
+    client = _get_client()
+    model, _, _ = _model_and_params()
+
+    attempts = int(os.getenv("OPENAI_RETRIES", "2"))
+    delay_base = 0.6  # seconds
+    last_err: Optional[Exception] = None
+
+    for attempt in range(attempts + 1):
+        try:
+            log.info(f"Calling OpenAI model={model} temp={temperature} max_tokens={max_tokens} attempt={attempt+1}")
+            resp = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            return _safe_text(resp)
+        except (RateLimitError, APIConnectionError, APITimeoutError, APIStatusError) as e:
+            last_err = e
+            # backoff with jitter
+            sleep_s = delay_base * (2 ** attempt) + random.random() * 0.25
+            log.warning(f"OpenAI transient error ({e.__class__.__name__}): {e}. Retrying in {sleep_s:.2f}s...")
+            time.sleep(sleep_s)
+        except Exception as e:
+            # non-retryable or unexpected
+            log.exception("OpenAI call failed: %s", e)
+            return "Sorry—LLM is unavailable right now."
+
+    # All retries failed
+    log.error("OpenAI call gave up after retries: %s", last_err)
+    return "LLM is busy right now. Please try again in a moment."
 
 
 # -------- Primary API used by /chat --------
@@ -136,23 +185,16 @@ def respond(user_text: str, identity_context: Optional[dict] = None) -> str:
     if not isinstance(user_text, str) or not user_text.strip():
         return "Say something first, boss. I can’t read minds… yet."
 
-    client = _get_client()
     model, temperature, max_tokens = _model_and_params()
     system_prompt = _build_system_prompt(identity_context)
 
     user_msg = user_text if not identity_context else f"{identity_context.get('name') or 'User'}: {user_text}"
 
-    log.info(f"Calling OpenAI model={model} temp={temperature} max_tokens={max_tokens}")
-    resp = client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_msg},
-        ],
-        temperature=temperature,
-        max_tokens=max_tokens,
-    )
-    out = _safe_text(resp)
+    messages: List[Dict[str, str]] = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user",   "content": user_msg},
+    ]
+    out = _call_openai(messages, temperature=temperature, max_tokens=max_tokens)
     log.info(f"Reply length={len(out)} chars")
     return out
 
@@ -167,9 +209,12 @@ def generate_reply(
     Generate a reply given user_text and optional context messages.
 
     - Uses system PERSONA above.
-    - Respects OPENAI_MODEL (default: gpt-4o-mini), OPENAI_TEMPERATURE (0.4), OPENAI_MAX_TOKENS (400).
-    - Raises on missing/invalid API key; your FastAPI handler catches and returns JSON error.
+    - Respects OPENAI_MODEL (default: gpt-4o-mini), OPENAI_TEMPERATURE (0.4), OPENAI_MAX_TOKENS (400), OPENAI_RETRIES (2).
+    - Raises on missing/invalid API key; your FastAPI handler should catch and return JSON error.
     """
+    if not isinstance(user_text, str) or not user_text.strip():
+        return "Say something first, boss. I can’t read minds… yet."
+
     messages: List[Dict[str, str]] = [{"role": "system", "content": PERSONA}]
 
     if context_msgs:
@@ -182,12 +227,6 @@ def generate_reply(
     messages.append({"role": "user", "content": f"{name}: {user_text}"})
 
     model, temperature, max_tokens = _model_and_params()
-    client = _get_client()
-    log.info(f"(legacy) Calling OpenAI model={model}")
-    resp = client.chat.completions.create(
-        model=model,
-        messages=messages,
-        temperature=temperature,
-        max_tokens=max_tokens,
-    )
-    return _safe_text(resp)
+    out = _call_openai(messages, temperature=temperature, max_tokens=max_tokens)
+    log.info(f"(legacy) Reply length={len(out)} chars")
+    return out
