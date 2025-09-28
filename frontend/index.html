@@ -50,13 +50,37 @@ saveNameBtn.onclick = async () => { NAME = nameEl.value || 'Guest'; localStorage
 };
 function addMsg(who, text, cls){ const el = document.createElement('div'); el.className='msg '+(cls||'');
   el.innerText=(who?who+':\n':'')+(text||''); chat.appendChild(el); chat.scrollTop=chat.scrollHeight; }
-form.onsubmit = async (e)=>{ e.preventDefault(); const msg=input.value.trim(); if(!msg) return;
-  addMsg(NAME||'Me', msg, 'me'); input.value='';
-  const fd = new FormData(); fd.append('message', msg); fd.append('name', NAME||'Guest');
-  const r = await fetch(API + '/chat', {method:'POST', body: fd}); const j = await r.json();
+form.onsubmit = async (e)=>{ 
+  e.preventDefault(); 
+  const msg = input.value.trim(); 
+  if (!msg) return;
+
+  addMsg(NAME || 'Me', msg, 'me'); 
+  input.value = '';
+
+  // ✅ Send JSON to /chat (what FastAPI expects)
+  const r = await fetch(API + '/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: msg })
+  });
+  const j = await r.json();
   addMsg('MoeX', j.reply || '(no reply)', 'bot');
-  try{ const tfd=new FormData(); tfd.append('text', j.reply||''); const rr=await fetch(API+'/tts',{method:'POST',body:tfd});
-    if(rr.ok){ const blob=await rr.blob(); const url=URL.createObjectURL(blob); const audio=new Audio(url); audio.play(); } }catch(_){}
+
+  // (Optional) TTS call — comment out if you don’t have /tts on the backend:
+  /*
+  try {
+    const tfd = new FormData(); 
+    tfd.append('text', j.reply || ''); 
+    const rr = await fetch(API + '/tts', { method: 'POST', body: tfd });
+    if (rr.ok) { 
+      const blob = await rr.blob(); 
+      const url = URL.createObjectURL(blob); 
+      const audio = new Audio(url); 
+      audio.play(); 
+    }
+  } catch (_) {}
+  */
 };
 // mic (Chrome): Web Speech API
 let rec; const micBtn=document.getElementById('mic');
