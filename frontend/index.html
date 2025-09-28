@@ -1,94 +1,183 @@
-<!doctype html><html><head>
-<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>MoeX — Abu Jafar’s Bat-Signal</title>
-<style>
-body{font-family:Inter,system-ui,Segoe UI,Arial,sans-serif;margin:0;background:#0a0b10;color:#e7ebf3}
-.wrap{max-width:980px;margin:48px auto;padding:0 20px}
-.card{background:linear-gradient(180deg,#0f1222,#0a0b10);border:1px solid #1b2338;border-radius:20px;box-shadow:0 8px 40px rgba(0,0,0,.35)}
-header{padding:22px 24px;border-bottom:1px solid #1b2338;display:flex;gap:12px;align-items:center;justify-content:space-between}
-header h1{font-size:20px;margin:0;letter-spacing:.2px}.badge{padding:4px 10px;border-radius:999px;background:#111a2b;border:1px solid #27324d;color:#9fb4d9;font-size:12px}
-#chat{padding:20px;min-height:480px;max-height:65vh;overflow:auto}
-.msg{margin:12px 0;padding:14px 16px;border-radius:14px;white-space:pre-wrap}
-.me{background:#141c2e;border:1px solid #213256}.bot{background:#0e1422;border-left:3px solid #7aa2ff;border:1px solid #1a2b4d}
-form{display:flex;gap:10px;padding:14px;border-top:1px solid #1b2338;background:#0b1020;border-radius:0 0 20px 20px}
-input,button,textarea{border-radius:12px;border:1px solid #26314d;background:#0e1526;color:#e7ebf3;padding:12px}
-textarea{flex:1;resize:vertical}.small{font-size:12px;color:#a3b1c7}
-.subtitle{display:block;font-size:13px;color:#9fb4d9;font-weight:500;letter-spacing:.2px;margin-top:2px}
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>MoeX — Abu Jafar’s Bat-Signal</title>
+  <style>
+    body{font-family:Inter,system-ui,Segoe UI,Arial,sans-serif;margin:0;background:#0a0b10;color:#e7ebf3}
+    .wrap{max-width:980px;margin:48px auto;padding:0 20px}
+    .card{background:linear-gradient(180deg,#0f1222,#0a0b10);border:1px solid #1b2338;border-radius:20px;box-shadow:0 8px 40px rgba(0,0,0,.35)}
+    header{padding:22px 24px;border-bottom:1px solid #1b2338;display:flex;gap:12px;align-items:center;justify-content:space-between}
+    header h1{font-size:20px;margin:0;letter-spacing:.2px}
+    .badge{padding:4px 10px;border-radius:999px;background:#111a2b;border:1px solid #27324d;color:#9fb4d9;font-size:12px}
+    #chat{padding:20px;min-height:480px;max-height:65vh;overflow:auto}
+    .msg{margin:12px 0;padding:14px 16px;border-radius:14px;white-space:pre-wrap;line-height:1.4}
+    .me{background:#141c2e;border:1px solid #213256}
+    .bot{background:#0e1422;border-left:3px solid #7aa2ff;border:1px solid #1a2b4d}
+    .sys{background:#0d111c;border:1px dashed #28324c;color:#9fb4d9}
+    form{display:flex;gap:10px;padding:14px;border-top:1px solid #1b2338;background:#0b1020;border-radius:0 0 20px 20px}
+    input,button,textarea{border-radius:12px;border:1px solid #26314d;background:#0e1526;color:#e7ebf3;padding:12px}
+    textarea{flex:1;resize:vertical}
+    .small{font-size:12px;color:#a3b1c7}
+    .subtitle{display:block;font-size:13px;color:#9fb4d9;font-weight:500;letter-spacing:.2px;margin-top:2px}
+    .row{padding:8px 16px}
+    .hide{display:none}
+    .spin{display:inline-block;width:16px;height:16px;border:2px solid #4b5b7d;border-top-color:transparent;border-radius:50%;animation:sp 1s linear infinite;margin-left:6px}
+    @keyframes sp{to{transform:rotate(360deg)}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <header>
+        <div>
+          <h1>MoeX</h1>
+          <span class="subtitle">Abu Jafar's Bat-Signal</span>
+        </div>
+        <span class="badge">Why So Serious?</span>
+      </header>
 
-</style></head><body>
-<div class="wrap"><div class="card">
-<header>
-  <div>
-    <h1>MoeX</h1>
-    <span class="subtitle">Abu Jafar's Bat-Signal</span>
+      <div id="chat"></div>
+
+      <div class="row small">
+        Name:
+        <input id="name" placeholder="Your name" />
+        <button id="saveName">Set</button>
+        <span id="who" class="small" style="margin-left:8px;color:#9fb4d9"></span>
+      </div>
+
+      <form id="f">
+        <textarea id="m" rows="2" placeholder="Don't be shy… ask away!"></textarea>
+        <button type="button" id="mic" title="Dictate (Chrome)">🎤</button>
+        <button id="sendBtn">Send</button>
+      </form>
+    </div>
   </div>
-  <span class="badge">Why So Serious?</span>
-</header>
 
-<div id="chat"></div>
-<div style="padding:8px 16px" class="small">Name: <input id="name" placeholder="Your name"/> <button id="saveName">Set</button></div>
-<form id="f"><textarea id="m" rows="2" placeholder="Dont be shy.. feel free to ask!"></textarea><button type="button" id="mic">🎤</button><button>Send</button></form>
-</div></div>
-<script>
-const API = 'https://moex-api.onrender.com'; // CHANGE AFTER DEPLOY; for local dev use 'http://localhost:8030'
-const chat = document.getElementById('chat'), form = document.getElementById('f');
-const input = document.getElementById('m'), nameEl = document.getElementById('name');
-// Enter to send, Shift+Enter for newline
-input.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    form.requestSubmit(); // triggers your existing form.onsubmit
-  }
-});
-const saveNameBtn = document.getElementById('saveName');
-let NAME = localStorage.getItem('moex_name') || ''; if (NAME) nameEl.value = NAME;
+  <!-- Inline app logic -->
+  <script>
+    // Auto-select API: localhost → dev; else → Render
+    const API = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+      ? 'http://localhost:8030'
+      : 'https://moex-api.onrender.com';
 
-saveNameBtn.onclick = async () => { NAME = nameEl.value || 'Guest'; localStorage.setItem('moex_name', NAME);
-  const fd = new FormData(); fd.append('name', NAME);
-  await fetch(API + '/register', {method:'POST', body: fd});
-  addMsg('System', `Welcome, ${NAME}.`, 'bot');
-};
-function addMsg(who, text, cls){ const el = document.createElement('div'); el.className='msg '+(cls||'');
-  el.innerText=(who?who+':\n':'')+(text||''); chat.appendChild(el); chat.scrollTop=chat.scrollHeight; }
-form.onsubmit = async (e)=>{ 
-  e.preventDefault(); 
-  const msg = input.value.trim(); 
-  if (!msg) return;
+    const chat   = document.getElementById('chat');
+    const form   = document.getElementById('f');
+    const input  = document.getElementById('m');
+    const nameEl = document.getElementById('name');
+    const whoEl  = document.getElementById('who');
+    const sendBtn= document.getElementById('sendBtn');
 
-  addMsg(NAME || 'Me', msg, 'me'); 
-  input.value = '';
+    const saveNameBtn = document.getElementById('saveName');
+    let NAME = localStorage.getItem('moex_name') || '';
+    if (NAME) nameEl.value = NAME;
+    whoEl.textContent = NAME ? `You are: ${NAME}` : 'Guest mode';
 
-  // ✅ Send JSON to /chat (what FastAPI expects)
-  const r = await fetch(API + '/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message: msg })
-  });
-  const j = await r.json();
-  addMsg('MoeX', j.reply || '(no reply)', 'bot');
-
-  // (Optional) TTS call — comment out if you don’t have /tts on the backend:
-  /*
-  try {
-    const tfd = new FormData(); 
-    tfd.append('text', j.reply || ''); 
-    const rr = await fetch(API + '/tts', { method: 'POST', body: tfd });
-    if (rr.ok) { 
-      const blob = await rr.blob(); 
-      const url = URL.createObjectURL(blob); 
-      const audio = new Audio(url); 
-      audio.play(); 
+    // Utilities
+    function addMsg(who, text, cls) {
+      const el = document.createElement('div');
+      el.className = 'msg ' + (cls || '');
+      el.innerText = (who ? who + ':\n' : '') + (text || '');
+      chat.appendChild(el);
+      chat.scrollTop = chat.scrollHeight;
+      return el;
     }
-  } catch (_) {}
-  */
-};
-// mic (Chrome): Web Speech API
-let rec; const micBtn=document.getElementById('mic');
-if ('webkitSpeechRecognition' in window) { const SR=window.webkitSpeechRecognition; rec=new SR();
-  rec.continuous=false; rec.interimResults=false; rec.lang='en-US';
-  rec.onresult=(e)=>{ input.value=(input.value+' '+e.results[0][0].transcript).trim(); };
-  rec.onerror=()=>{ micBtn.textContent='🎤'; }; rec.onend=()=>{ micBtn.textContent='🎤'; };
-  micBtn.onclick=()=>{ if(!rec) return; micBtn.textContent='⏺️'; rec.start(); };
-} else { micBtn.disabled=true; micBtn.title='Speech recognition not supported';}
-<script src="/app.js" defer></script>
-</body></html>
+
+    async function postJSON(url, body) {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json' },
+        body: JSON.stringify(body ?? {})
+      });
+      if (!res.ok) {
+        const t = await res.text().catch(()=> '');
+        throw new Error(`HTTP ${res.status}: ${t}`);
+      }
+      return res.json();
+    }
+
+    // Enter to send, Shift+Enter for newline
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        form.requestSubmit();
+      }
+    });
+
+    // Save/set name — /register expects FormData (FastAPI Form(...))
+    saveNameBtn.onclick = async () => {
+      NAME = nameEl.value || 'Guest';
+      localStorage.setItem('moex_name', NAME);
+      whoEl.textContent = `You are: ${NAME}`;
+      const fd = new FormData();
+      fd.append('name', NAME);
+      try {
+        await fetch(API + '/register', { method:'POST', body: fd });
+        addMsg('System', `Welcome, ${NAME}.`, 'sys');
+      } catch {
+        addMsg('System', `Couldn’t register your name. Continuing as ${NAME}.`, 'sys');
+      }
+    };
+
+    // Submit → send JSON to /chat
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const msg = (input.value || '').trim();
+      if (!msg) return;
+
+      addMsg(NAME || 'Me', msg, 'me');
+      input.value = '';
+      input.focus();
+
+      // show "thinking…" bubble
+      sendBtn.disabled = true;
+      const thinking = addMsg('MoeX', '…thinking', 'bot');
+      const spinner = document.createElement('span');
+      spinner.className = 'spin';
+      thinking.appendChild(document.createTextNode(' '));
+      thinking.appendChild(spinner);
+
+      try {
+        const data = await postJSON(API + '/chat', { message: msg });
+        thinking.remove();
+        addMsg('MoeX', data.reply || '(no reply)', 'bot');
+        // Optional TTS (your backend may not implement /tts):
+        // await fetch(API + '/tts', { method:'POST', body: new URLSearchParams({ text: data.reply || '' }) });
+      } catch (err) {
+        thinking.remove();
+        addMsg('System', String(err.message || err), 'sys');
+      } finally {
+        sendBtn.disabled = false;
+      }
+    };
+
+    // Mic (Chrome-only) — Web Speech API
+    let rec;
+    const micBtn = document.getElementById('mic');
+    if ('webkitSpeechRecognition' in window) {
+      const SR = window.webkitSpeechRecognition;
+      rec = new SR();
+      rec.continuous = false;
+      rec.interimResults = false;
+      rec.lang = 'en-US';
+      rec.onresult = (e) => {
+        input.value = (input.value + ' ' + e.results[0][0].transcript).trim();
+      };
+      rec.onerror = () => { micBtn.textContent = '🎤'; };
+      rec.onend   = () => { micBtn.textContent = '🎤'; };
+      micBtn.onclick = () => {
+        if (!rec) return;
+        micBtn.textContent = '⏺️';
+        rec.start();
+      };
+    } else {
+      micBtn.disabled = true;
+      micBtn.title = 'Speech recognition not supported';
+    }
+  </script>
+
+  <!-- Keep external file outside of the inline <script>; optional extension point -->
+  <script src="/app.js" defer></script>
+</body>
+</html>
