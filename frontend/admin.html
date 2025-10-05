@@ -1,0 +1,124 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>MoeX Admin</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 20px; }
+    h2 { margin-top: 28px; }
+    .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; margin: 16px 0; }
+    input, textarea, select, button { margin-top: 6px; padding: 8px; width: 100%; }
+    pre { background: #f7f7f7; padding: 8px; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <h1>MoeX Admin Panel</h1>
+
+  <div class="card">
+    <h2>People</h2>
+    <button onclick="loadPeople()">Refresh People</button>
+    <div id="peopleList"></div>
+  </div>
+
+  <div class="card">
+    <h2>Add Person</h2>
+    <input id="p_name" placeholder="Name (Fatima Alzaabi)" />
+    <input id="p_handle" placeholder="Handle (fatima)" />
+    <input id="p_email" placeholder="Email (optional)" />
+    <input id="p_tags" placeholder="Tags (Finance, AR)" />
+    <textarea id="p_persona" placeholder="Persona (short replies, bullets, deadlines)"></textarea>
+    <input id="p_secret" placeholder="Secret word" />
+    <button onclick="addPerson()">Create</button>
+    <div id="addOut"></div>
+  </div>
+
+  <div class="card">
+    <h2>Update Person</h2>
+    <select id="u_select"></select>
+    <input id="u_name" placeholder="New name" />
+    <input id="u_handle" placeholder="New handle" />
+    <input id="u_email" placeholder="New email" />
+    <input id="u_tags" placeholder="New tags" />
+    <textarea id="u_persona" placeholder="New persona"></textarea>
+    <button onclick="updatePerson()">Update</button>
+    <div id="updateOut"></div>
+  </div>
+
+  <div class="card">
+    <h2>Tasks</h2>
+    <select id="t_select"></select>
+    <input id="t_title" placeholder="Task title" />
+    <input id="t_due" placeholder="Due date (YYYY-MM-DD)" />
+    <button onclick="addTask()">Add Task</button>
+    <button onclick="loadTasks()">Load Tasks</button>
+    <div id="tasksList"></div>
+  </div>
+
+  <script>
+    const API = "http://127.0.0.1:8000";
+
+    async function loadPeople() {
+      const r = await fetch(`${API}/people`);
+      const d = await r.json();
+      if (!d.ok) return;
+      const list = d.people.map(p => `
+        <div><b>${p.name}</b> (@${p.handle})<br/>
+        Tags: ${p.tags || "-"}<br/>
+        Persona: <pre>${p.persona || "-"}</pre></div>
+      `).join("<hr/>");
+      document.getElementById("peopleList").innerHTML = list;
+
+      const opts = d.people.map(p => `<option value="${p.id}">${p.name}</option>`).join("");
+      document.getElementById("u_select").innerHTML = opts;
+      document.getElementById("t_select").innerHTML = opts;
+    }
+
+    async function addPerson() {
+      const body = {
+        name: p_name.value, handle: p_handle.value, email: p_email.value,
+        tags: p_tags.value, persona: p_persona.value, secret_word: p_secret.value
+      };
+      const r = await fetch(`${API}/people`, {
+        method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body)
+      });
+      const d = await r.json();
+      addOut.innerText = d.ok ? "✅ Created person id=" + d.person_id : "❌ Failed";
+      loadPeople();
+    }
+
+    async function updatePerson() {
+      const id = u_select.value;
+      const body = {
+        name: u_name.value || null, handle: u_handle.value || null,
+        email: u_email.value || null, tags: u_tags.value || null,
+        persona: u_persona.value || null
+      };
+      const r = await fetch(`${API}/people/${id}`, {
+        method: "PATCH", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body)
+      });
+      const d = await r.json();
+      updateOut.innerText = d.ok ? "✅ Updated!" : "❌ Failed";
+      loadPeople();
+    }
+
+    async function addTask() {
+      const body = { person_id: parseInt(t_select.value), title: t_title.value, due_date: t_due.value };
+      const r = await fetch(`${API}/tasks`, {
+        method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body)
+      });
+      const d = await r.json();
+      tasksList.innerText = d.ok ? "✅ Task added" : "❌ Failed";
+    }
+
+    async function loadTasks() {
+      const pid = t_select.value;
+      const r = await fetch(`${API}/tasks?person_id=${pid}`);
+      const d = await r.json();
+      tasksList.innerHTML = d.tasks.map(t => `<div>#${t.id}: ${t.title} (${t.due_date || "no due"}) — ${t.status}</div>`).join("<br/>");
+    }
+
+    loadPeople();
+  </script>
+</body>
+</html>
+##### Moe note to self: Remember delete this admin page and insert gpt promt (cant you give me easy front way or upload for each of these tasks) but make it also code the admin panel in sync with existing api endpoints and data models and codes.
